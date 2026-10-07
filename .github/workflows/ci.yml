@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  ORT_VERSION: 1.20.1
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+          pip install -r python/requirements.txt
+          curl -sSL -o ort.tgz https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION}.tgz
+          tar xzf ort.tgz
+      - name: Generate and quantize models
+        run: |
+          python python/make_models.py
+          python python/quantize.py
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DONNXRUNTIME_ROOT=$PWD/onnxruntime-linux-x64-${ORT_VERSION}
+          cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Run demo pipeline
+        run: ./build/bin/orchestrator_cli --pipeline pipelines/demo.pipeline --iterations 20 --metrics-db build/metrics.db
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          pip install -r python/requirements.txt
+          Invoke-WebRequest -Uri "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/onnxruntime-win-x64-$env:ORT_VERSION.zip" -OutFile ort.zip
+          Expand-Archive ort.zip -DestinationPath .
+      - name: Generate and quantize models
+        run: |
+          python python/make_models.py
+          python python/quantize.py
+      - name: Build (MSVC)
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 -DONNXRUNTIME_ROOT="$PWD/onnxruntime-win-x64-$env:ORT_VERSION"
+          cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Run demo pipeline
+        run: build\bin\orchestrator_cli.exe --pipeline pipelines/demo.pipeline --iterations 20
