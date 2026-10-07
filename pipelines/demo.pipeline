@@ -1,0 +1,9 @@
+# Demo pipeline: normalize -> {FP32 classifier, INT8 classifier} -> softmax plugin per head.
+# The two classifier branches have no dependency on each other, so the
+# executor runs them in parallel on the thread pool.
+
+node normalize   type=onnx   path=../models/normalize.onnx
+node clf_fp32    type=onnx   path=../models/classifier_fp32.onnx  deps=normalize
+node clf_int8    type=onnx   path=../models/classifier_int8.onnx  deps=normalize
+node probs_fp32  type=plugin path=softmax_plugin                  deps=clf_fp32
+node probs_int8  type=plugin path=softmax_plugin                  deps=clf_int8
