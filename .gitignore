@@ -1,0 +1,11 @@
+build*/
+out/
+*.db
+onnxruntime-*/
+ort.tgz
+ort.zip
+__pycache__/
+.vs/
+.vscode/
+*.user
+CMakeUserPresets.json
